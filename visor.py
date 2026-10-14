@@ -3,6 +3,7 @@ import streamlit as st
 import mammoth
 import zipfile
 import io
+import base64
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(
@@ -45,7 +46,7 @@ st.markdown("""
 if "archivo_activo_zip" not in st.session_state:
     st.session_state.archivo_activo_zip = None
 
-# --- ESCANEO AUTOMÁTICO DENTRO DEL ZIP ---
+# --- ESCANEO AUTOMÁTICO DE WORD Y PDF DENTRO DEL ZIP ---
 diccionario_archivos = {}
 subcarpetas_detectadas = ["Todas"]
 
@@ -53,11 +54,12 @@ if os.path.exists(ZIP_DOCUMENTOS):
     try:
         with zipfile.ZipFile(ZIP_DOCUMENTOS, 'r') as archive:
             for zfile in archive.namelist():
-                # Ignorar archivos ocultos del sistema o carpetas vacías
-                if zfile.endswith('.docx') and not os.path.basename(zfile).startswith('.') and not os.path.basename(zfile).startswith('~$'):
+                # Detectar extensiones válidas (.docx y .pdf) ignorando archivos temporales
+                es_valido = zfile.lower().endswith(('.docx', '.pdf'))
+                if es_valido and not os.path.basename(zfile).startswith('.') and not os.path.basename(zfile).startswith('~$'):
                     partes = zfile.split('/')
                     if len(partes) > 2:
-                        nombre_carpeta = partes[-2] # Toma el nombre de la subcarpeta interna
+                        nombre_carpeta = partes[-2]
                     else:
                         nombre_carpeta = "Raíz (Archivos Sueltos)"
                     
@@ -98,7 +100,8 @@ with st.sidebar:
 
     st.markdown(f"### 📄 DOCUMENTOS ENCONTRADOS ({len(archivos_mostrar)})")
     for item in archivos_mostrar:
-        marca = "▶️ " if st.session_state.archivo_activo_zip == item["ruta_zip"] else "📄 "
+        icono = "📕 " if item["nombre"].lower().endswith('.pdf') else "📄 "
+        marca = "▶️ " if st.session_state.archivo_activo_zip == item["ruta_zip"] else icono
         if st.button(f"{marca}{item['nombre']}", key=f"btn_zip_{item['ruta_zip']}", use_container_width=True):
             st.session_state.archivo_activo_zip = item["ruta_zip"]
             st.rerun()
@@ -120,22 +123,33 @@ if st.session_state.archivo_activo_zip and os.path.exists(ZIP_DOCUMENTOS):
     
     try:
         with zipfile.ZipFile(ZIP_DOCUMENTOS, 'r') as archive:
-            # Leemos el archivo Word directamente desde la memoria del ZIP
-            with archive.open(ruta_interna) as docx_file:
-                bytes_io = io.BytesIO(docx_file.read())
-                resultado = mammoth.convert_to_html(bytes_io, ignore_empty_paragraphs=True)
-                html_contenido = resultado.value
-                html_contenido = html_contenido.replace("<li>1. ", "<li style='list-style-type: none; margin-left: -15px;'>🔹 <b>")
+            with archive.open(ruta_interna) as file_data:
+                contenido_binario = file_data.read()
                 
-                if not html_contenido.strip():
-                    html_contenido = "<p style='color: #64748b; font-style: italic;'>El documento seleccionado está vacío.</p>"
+                # --- PROCESAR CASO DE ARCHIVO WORD (.DOCX) ---
+                if ruta_interna.lower().endswith('.docx'):
+                    bytes_io = io.BytesIO(contenido_binario)
+                    resultado = mammoth.convert_to_html(bytes_io, ignore_empty_paragraphs=True)
+                    html_contenido = resultado.value
+                    html_contenido = html_contenido.replace("<li>1. ", "<li style='list-style-type: none; margin-left: -15px;'>🔹 <b>")
+                    
+                    if not html_contenido.strip():
+                        html_contenido = "<p style='color: #64748b; font-style: italic;'>El documento seleccionado está vacío.</p>"
+                    
+                    st.markdown(f"""
+                        <div class="contenedor-vista-previa">
+                            {html_contenido}
+                        </div>
+                    """, unsafe_allow_html=True)
                 
-                st.markdown(f"""
-                    <div class="contenedor-vista-previa">
-                        {html_contenido}
-                    </div>
-                """, unsafe_allow_html=True)
+                # --- PROCESAR CASO DE ARCHIVO PDF (.PDF) ---
+                elif ruta_interna.lower().endswith('.pdf'):
+                    # Convertimos el PDF a base64 para que el navegador lo dibuje directo en pantalla
+                    base64_pdf = base64.b64encode(contenido_binario).decode('utf-8')
+                    pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="750px" style="border:3px solid #3b82f6; border-radius:10px;"></iframe>'
+                    st.markdown(pdf_display, unsafe_allow_html=True)
+                    
     except Exception as err_lectura:
         st.error(f"No se pudo cargar la vista previa: {str(err_lectura)}")
 else:
-    st.info("👈 Selecciona cualquier documento de la lista de la izquierda para iniciar la vista previa en pantalla.")
+    st.info("👈 Selecciona cualquier documento (Word o PDF) de la lista de la izquierda para iniciar la vista previa en pantalla.")
