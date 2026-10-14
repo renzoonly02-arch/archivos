@@ -4,6 +4,7 @@ import mammoth
 import zipfile
 import io
 from pypdf import PdfReader
+from pdf2image import convert_from_bytes
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(
@@ -132,33 +133,36 @@ if st.session_state.archivo_activo_zip and os.path.exists(ZIP_DOCUMENTOS):
                     html_contenido = resultado.value
                     html_contenido = html_contenido.replace("<li>1. ", "<li style='list-style-type: none; margin-left: -15px;'>🔹 <b>")
                     
-                    if not html_contenido.strip():
-                        html_contenido = "<p style='color: #64748b; font-style: italic;'>El documento seleccionado está vacío.</p>"
-                    
                     st.markdown(f"""
                         <div class="contenedor-vista-previa">
                             {html_contenido}
                         </div>
                     """, unsafe_allow_html=True)
                 
-                # --- VISTA PREVIA PARA PDF (.PDF) EXTRAYENDO EL TEXTO DIRECTO EN PANTALLA ---
+                # --- VISTA PREVIA PARA PDF (.PDF) TRADUCIDA EN IMÁGENES NATIVAS (EVITA BLOQUEOS) ---
                 elif ruta_interna.lower().endswith('.pdf'):
-                    bytes_io = io.BytesIO(contenido_binario)
-                    lector_pdf = PdfReader(bytes_io)
-                    
-                    texto_completo = ""
-                    for num_pag, pagina in enumerate(lector_pdf.pages):
-                        texto_completo += f"--- PÁGINA {num_pag + 1} ---\n"
-                        texto_completo += pagina.extract_text() + "\n\n"
-                    
-                    if not texto_completo.strip():
-                        texto_completo = "El PDF no contiene texto digital copiable (es una imagen/escaneo)."
+                    try:
+                        # Convertimos las páginas del PDF directamente a imágenes de alta calidad
+                        paginas_imagenes = convert_from_bytes(contenido_binario)
                         
-                    st.markdown(f"""
-                        <div class="contenedor-vista-previa">
-                            <pre style="white-space: pre-wrap; font-family: sans-serif; font-size:15px; color:#1e293b;">{texto_completo}</pre>
-                        </div>
-                    """, unsafe_allow_html=True)
+                        st.success(f"📈 Se cargaron con éxito las {len(paginas_imagenes)} páginas del documento original.")
+                        
+                        # Mostramos cada página una abajo de la otra en formato vertical limpio
+                        for num, pagina in enumerate(paginas_imagenes):
+                            st.image(
+                                pagina, 
+                                caption=f"Página {num + 1} de {len(paginas_imagenes)}", 
+                                use_container_width=True
+                            )
+                    except Exception as err_pdf:
+                        st.info("⚠️ Para una mejor lectura visual, puedes abrir el archivo directamente usando este control:")
+                        st.download_button(
+                            label="📄 Abrir documento PDF en pantalla completa ➔",
+                            data=contenido_binario,
+                            file_name=nombre_archivo,
+                            mime="application/pdf",
+                            use_container_width=True
+                        )
                     
     except Exception as err_lectura:
         st.error(f"No se pudo cargar la vista previa: {str(err_lectura)}")
