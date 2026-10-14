@@ -3,7 +3,7 @@ import streamlit as st
 import mammoth
 import zipfile
 import io
-import urllib.parse
+import pdfplumber
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(
@@ -121,15 +121,13 @@ if st.session_state.archivo_activo_zip and os.path.exists(ZIP_DOCUMENTOS):
     st.markdown(f"<h3 style='color: #38bdf8;'>👁️ Vista Previa de: <span style='color: white;'>{nombre_archivo}</span></h3>", unsafe_allow_html=True)
     
     try:
-        # Obtenemos la dirección web actual de tu aplicación en Streamlit Cloud de forma dinámica
-        url_base_repo = "https://githubusercontent.com"
-        url_archivo_github = f"{url_base_repo}{urllib.parse.quote(ruta_interna)}"
-        
-        # --- VISTA PREVIA PARA WORD (.DOCX) ---
-        if ruta_interna.lower().endswith('.docx'):
-            with zipfile.ZipFile(ZIP_DOCUMENTOS, 'r') as archive:
-                with archive.open(ruta_interna) as file_data:
-                    bytes_io = io.BytesIO(file_data.read())
+        with zipfile.ZipFile(ZIP_DOCUMENTOS, 'r') as archive:
+            with archive.open(ruta_interna) as file_data:
+                contenido_binario = file_data.read()
+                
+                # --- VISTA PREVIA PARA WORD (.DOCX) ---
+                if ruta_interna.lower().endswith('.docx'):
+                    bytes_io = io.BytesIO(contenido_binario)
                     resultado = mammoth.convert_to_html(bytes_io, ignore_empty_paragraphs=True)
                     html_contenido = resultado.value
                     html_contenido = html_contenido.replace("<li>1. ", "<li style='list-style-type: none; margin-left: -15px;'>🔹 <b>")
@@ -139,15 +137,22 @@ if st.session_state.archivo_activo_zip and os.path.exists(ZIP_DOCUMENTOS):
                             {html_contenido}
                         </div>
                     """, unsafe_allow_html=True)
-        
-        # --- VISTA PREVIA PARA PDF (.PDF) USANDO EL VISOR EN LA NUBE NATIVO ---
-        elif ruta_interna.lower().endswith('.pdf'):
-            # Usamos el visor oficial embebido de Google Docs (Este método abre el archivo en pantalla al 100%)
-            visor_url = f"https://google.com{url_archivo_github}&embedded=true"
-            
-            st.markdown(f"""
-                <iframe src="{visor_url}" width="100%" height="750px" style="border:3px solid #3b82f6; border-radius:10px; background-color:white;"></iframe>
-            """, unsafe_allow_html=True)
+                
+                # --- VISTA PREVIA PARA PDF (.PDF) PROCESADA EN LÍNEA DE FORMA NATIVA ---
+                elif ruta_interna.lower().endswith('.pdf'):
+                    bytes_io = io.BytesIO(contenido_binario)
+                    
+                    with pdfplumber.open(bytes_io) as pdf:
+                        texto_pdf = ""
+                        for num_pag, pagina in enumerate(pdf.pages):
+                            texto_pdf += f"📝 --- PÁGINA {num_pag + 1} ---\n\n"
+                            texto_pdf += (pagina.extract_text() or "[Esta página contiene una imagen o escaneo plano]") + "\n\n"
+                    
+                    st.markdown(f"""
+                        <div class="contenedor-vista-previa" style="white-space: pre-wrap; overflow-y: auto; max-height: 700px; font-family: 'Segoe UI', sans-serif;">
+                            {texto_pdf}
+                        </div>
+                    """, unsafe_allow_html=True)
                     
     except Exception as err_lectura:
         st.error(f"No se pudo cargar la vista previa: {str(err_lectura)}")
