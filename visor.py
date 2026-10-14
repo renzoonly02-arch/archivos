@@ -3,8 +3,7 @@ import streamlit as st
 import mammoth
 import zipfile
 import io
-from pypdf import PdfReader
-from pdf2image import convert_from_bytes
+import urllib.parse
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(
@@ -122,13 +121,15 @@ if st.session_state.archivo_activo_zip and os.path.exists(ZIP_DOCUMENTOS):
     st.markdown(f"<h3 style='color: #38bdf8;'>👁️ Vista Previa de: <span style='color: white;'>{nombre_archivo}</span></h3>", unsafe_allow_html=True)
     
     try:
-        with zipfile.ZipFile(ZIP_DOCUMENTOS, 'r') as archive:
-            with archive.open(ruta_interna) as file_data:
-                contenido_binario = file_data.read()
-                
-                # --- VISTA PREVIA PARA WORD (.DOCX) ---
-                if ruta_interna.lower().endswith('.docx'):
-                    bytes_io = io.BytesIO(contenido_binario)
+        # Obtenemos la dirección web actual de tu aplicación en Streamlit Cloud de forma dinámica
+        url_base_repo = "https://githubusercontent.com"
+        url_archivo_github = f"{url_base_repo}{urllib.parse.quote(ruta_interna)}"
+        
+        # --- VISTA PREVIA PARA WORD (.DOCX) ---
+        if ruta_interna.lower().endswith('.docx'):
+            with zipfile.ZipFile(ZIP_DOCUMENTOS, 'r') as archive:
+                with archive.open(ruta_interna) as file_data:
+                    bytes_io = io.BytesIO(file_data.read())
                     resultado = mammoth.convert_to_html(bytes_io, ignore_empty_paragraphs=True)
                     html_contenido = resultado.value
                     html_contenido = html_contenido.replace("<li>1. ", "<li style='list-style-type: none; margin-left: -15px;'>🔹 <b>")
@@ -138,31 +139,15 @@ if st.session_state.archivo_activo_zip and os.path.exists(ZIP_DOCUMENTOS):
                             {html_contenido}
                         </div>
                     """, unsafe_allow_html=True)
-                
-                # --- VISTA PREVIA PARA PDF (.PDF) TRADUCIDA EN IMÁGENES NATIVAS (EVITA BLOQUEOS) ---
-                elif ruta_interna.lower().endswith('.pdf'):
-                    try:
-                        # Convertimos las páginas del PDF directamente a imágenes de alta calidad
-                        paginas_imagenes = convert_from_bytes(contenido_binario)
-                        
-                        st.success(f"📈 Se cargaron con éxito las {len(paginas_imagenes)} páginas del documento original.")
-                        
-                        # Mostramos cada página una abajo de la otra en formato vertical limpio
-                        for num, pagina in enumerate(paginas_imagenes):
-                            st.image(
-                                pagina, 
-                                caption=f"Página {num + 1} de {len(paginas_imagenes)}", 
-                                use_container_width=True
-                            )
-                    except Exception as err_pdf:
-                        st.info("⚠️ Para una mejor lectura visual, puedes abrir el archivo directamente usando este control:")
-                        st.download_button(
-                            label="📄 Abrir documento PDF en pantalla completa ➔",
-                            data=contenido_binario,
-                            file_name=nombre_archivo,
-                            mime="application/pdf",
-                            use_container_width=True
-                        )
+        
+        # --- VISTA PREVIA PARA PDF (.PDF) USANDO EL VISOR EN LA NUBE NATIVO ---
+        elif ruta_interna.lower().endswith('.pdf'):
+            # Usamos el visor oficial embebido de Google Docs (Este método abre el archivo en pantalla al 100%)
+            visor_url = f"https://google.com{url_archivo_github}&embedded=true"
+            
+            st.markdown(f"""
+                <iframe src="{visor_url}" width="100%" height="750px" style="border:3px solid #3b82f6; border-radius:10px; background-color:white;"></iframe>
+            """, unsafe_allow_html=True)
                     
     except Exception as err_lectura:
         st.error(f"No se pudo cargar la vista previa: {str(err_lectura)}")

@@ -1,4 +1,2 @@
 streamlit
 mammoth
-pypdf
-pdf2image
