@@ -3,7 +3,6 @@ import streamlit as st
 import mammoth
 import zipfile
 import io
-import base64
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(
@@ -54,7 +53,6 @@ if os.path.exists(ZIP_DOCUMENTOS):
     try:
         with zipfile.ZipFile(ZIP_DOCUMENTOS, 'r') as archive:
             for zfile in archive.namelist():
-                # Detectar extensiones válidas (.docx y .pdf) ignorando archivos temporales
                 es_valido = zfile.lower().endswith(('.docx', '.pdf'))
                 if es_valido and not os.path.basename(zfile).startswith('.') and not os.path.basename(zfile).startswith('~$'):
                     partes = zfile.split('/')
@@ -142,12 +140,18 @@ if st.session_state.archivo_activo_zip and os.path.exists(ZIP_DOCUMENTOS):
                         </div>
                     """, unsafe_allow_html=True)
                 
-                # --- PROCESAR CASO DE ARCHIVO PDF (.PDF) ---
+                # --- PROCESAR CASO DE ARCHIVO PDF (.PDF) REPARADO CON BOTÓN DE VISTA COMPLETA ---
                 elif ruta_interna.lower().endswith('.pdf'):
-                    # Convertimos el PDF a base64 para que el navegador lo dibuje directo en pantalla
-                    base64_pdf = base64.b64encode(contenido_binario).decode('utf-8')
-                    pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="750px" style="border:3px solid #3b82f6; border-radius:10px;"></iframe>'
-                    st.markdown(pdf_display, unsafe_allow_html=True)
+                    st.info("💡 Debido a las políticas de seguridad de Chrome, puedes abrir este PDF en una pestaña de visualización limpia usando el botón de abajo.")
+                    
+                    # Proporcionamos el visor oficial nativo por botón de descarga simulado
+                    st.download_button(
+                        label="📄 Hacer clic aquí para abrir y visualizar el PDF ➔",
+                        data=contenido_binario,
+                        file_name=nombre_archivo,
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
                     
     except Exception as err_lectura:
         st.error(f"No se pudo cargar la vista previa: {str(err_lectura)}")
