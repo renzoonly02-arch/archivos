@@ -3,7 +3,7 @@ import streamlit as st
 import mammoth
 import zipfile
 import io
-import base64
+import fitz  # PyMuPDF para renderizar PDFs como imágenes nativas rápidas
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(
@@ -138,22 +138,32 @@ if st.session_state.archivo_activo_zip and os.path.exists(ZIP_DOCUMENTOS):
                         </div>
                     """, unsafe_allow_html=True)
                 
-                # --- VISTA PREVIA PARA PDF REPARADA (MÉTODO SEGURO DE INCORPORACIÓN WEB) ---
+                # --- VISTA PREVIA PARA PDF REPARADA (RENDERIZADO DIRECTO A IMAGEN POR PÁGINA) ---
                 elif ruta_interna.lower().endswith('.pdf'):
-                    # Transformamos el PDF en un formato de datos limpio para el navegador
-                    base64_pdf = base64.b64encode(contenido_binario).decode('utf-8')
+                    # Cargamos el PDF en memoria con PyMuPDF
+                    doc_pdf = fitz.open(stream=contenido_binario, filetype="pdf")
                     
-                    # Con este diseño limpio de visor embebido tipo objeto, Chrome dibuja los planos sin bloquearlos
-                    pdf_html = f'''
-                        <object data="data:application/pdf;base64,{base64_pdf}" type="application/pdf" width="100%" height="750px" style="border:3px solid #3b82f6; border-radius:10px;">
-                            <div style="padding:20px; background-color:white; color:black; border-radius:10px;">
-                                💡 Tu navegador requiere confirmación. Haz clic en el botón de abajo para revisar el plano técnico:
-                                <br><br>
-                                <a href="data:application/pdf;base64,{base64_pdf}" download="{nombre_archivo}" style="background-color:#1e3a8a; color:white; padding:10px 20px; text-decoration:none; border-radius:5px; font-weight:bold;">Visualizar PDF Completo ➔</a>
-                            </div>
-                        </object>
-                    '''
-                    st.markdown(pdf_html, unsafe_allow_html=True)
+                    st.success(f"📈 El documento contiene {len(doc_pdf)} páginas originales. Renderizando vista visual...")
+                    
+                    # Recorremos cada una de las páginas del PDF
+                    for num_pag in range(len(doc_pdf)):
+                        pagina = doc_pdf.load_page(num_pag)
+                        
+                        # Aumentamos la resolución del renderizado (zoom_x y zoom_y a 2.0 para que se note nítido)
+                        matriz_zoom = fitz.Matrix(2.0, 2.0)
+                        pix = pagina.get_pixmap(matrix=matriz_zoom)
+                        
+                        # Convertimos los datos del mapa de píxeles a formato PNG estándar en memoria
+                        bytes_imagen = pix.tobytes("png")
+                        
+                        # Pintamos la imagen nítida verticalmente una debajo de la otra
+                        st.image(
+                            bytes_imagen, 
+                            caption=f"Página {num_pag + 1} de {len(doc_pdf)}", 
+                            use_container_width=True
+                        )
+                    
+                    doc_pdf.close()
                     
     except Exception as err_lectura:
         st.error(f"No se pudo cargar la vista previa: {str(err_lectura)}")
