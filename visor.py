@@ -36,10 +36,25 @@ st.markdown("""
         padding: 30px; border-radius: 10px; border: 3px solid #3b82f6;
         min-height: 500px; font-family: 'Segoe UI', sans-serif; margin-top: 15px;
     }
-    .contenedor-vista-previa h1, .contenedor-vista-previa h2, .contenedor-vista-previa h3 { color: #0f172a !important; border-bottom: 2px solid #cbd5e1; padding-bottom: 8px; }
+    .contenedor-vista-previa h1, .contenedor-vista-previa h2, .contenedor-vista-previa h3 { color: #0f172a !important; border-bottom: 2px solid #cbd5e1; padding-bottom: 8px; margin-top: 15px; }
     .contenedor-vista-previa p, .contenedor-vista-previa li, .contenedor-vista-previa td, .contenedor-vista-previa tr { font-size: 16px !important; line-height: 1.6 !important; color: #1e293b !important; }
     .contenedor-vista-previa table { border-collapse: collapse; width: 100%; margin-top: 15px; }
     .contenedor-vista-previa th, .contenedor-vista-previa td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; }
+    
+    /* Forzar estilo llamativo en el botón de descarga */
+    .stDownloadButton > button {
+        background-color: #0284c7 !important;
+        color: white !important;
+        font-weight: bold !important;
+        border: none !important;
+        border-radius: 8px !important;
+        padding: 12px 24px !important;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2) !important;
+    }
+    .stDownloadButton > button:hover {
+        background-color: #0369a1 !important;
+        border: none !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -125,6 +140,18 @@ if st.session_state.archivo_activo_zip and os.path.exists(ZIP_DOCUMENTOS):
             with archive.open(ruta_interna) as file_data:
                 contenido_binario = file_data.read()
                 
+                # --- [NUEVA FUNCIÓN]: BOTÓN PARA DESCARGAR EL ARCHIVO ORIGINAL ---
+                col_btn, col_espacio = st.columns([1, 2])
+                with col_btn:
+                    st.download_button(
+                        label="📥 Descargar archivo original",
+                        data=contenido_binario,
+                        file_name=nombre_archivo,
+                        mime="application/octet-stream",
+                        use_container_width=True
+                    )
+                st.write("")
+                
                 # --- VISTA PREVIA PARA WORD (.DOCX) ---
                 if ruta_interna.lower().endswith('.docx'):
                     bytes_io = io.BytesIO(contenido_binario)
@@ -140,29 +167,20 @@ if st.session_state.archivo_activo_zip and os.path.exists(ZIP_DOCUMENTOS):
                 
                 # --- VISTA PREVIA PARA PDF REPARADA (RENDERIZADO DIRECTO A IMAGEN POR PÁGINA) ---
                 elif ruta_interna.lower().endswith('.pdf'):
-                    # Cargamos el PDF en memoria con PyMuPDF
                     doc_pdf = fitz.open(stream=contenido_binario, filetype="pdf")
-                    
                     st.success(f"📈 El documento contiene {len(doc_pdf)} páginas originales. Renderizando vista visual...")
                     
-                    # Recorremos cada una de las páginas del PDF
                     for num_pag in range(len(doc_pdf)):
                         pagina = doc_pdf.load_page(num_pag)
-                        
-                        # Aumentamos la resolución del renderizado (zoom_x y zoom_y a 2.0 para que se note nítido)
                         matriz_zoom = fitz.Matrix(2.0, 2.0)
                         pix = pagina.get_pixmap(matrix=matriz_zoom)
-                        
-                        # Convertimos los datos del mapa de píxeles a formato PNG estándar en memoria
                         bytes_imagen = pix.tobytes("png")
                         
-                        # Pintamos la imagen nítida verticalmente una debajo de la otra
                         st.image(
                             bytes_imagen, 
                             caption=f"Página {num_pag + 1} de {len(doc_pdf)}", 
                             use_container_width=True
                         )
-                    
                     doc_pdf.close()
                     
     except Exception as err_lectura:
