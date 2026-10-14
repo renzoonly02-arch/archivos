@@ -3,7 +3,7 @@ import streamlit as st
 import mammoth
 import zipfile
 import io
-import pdfplumber
+import base64
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(
@@ -138,21 +138,22 @@ if st.session_state.archivo_activo_zip and os.path.exists(ZIP_DOCUMENTOS):
                         </div>
                     """, unsafe_allow_html=True)
                 
-                # --- VISTA PREVIA PARA PDF (.PDF) PROCESADA EN LÍNEA DE FORMA NATIVA ---
+                # --- VISTA PREVIA PARA PDF REPARADA (MÉTODO SEGURO DE INCORPORACIÓN WEB) ---
                 elif ruta_interna.lower().endswith('.pdf'):
-                    bytes_io = io.BytesIO(contenido_binario)
+                    # Transformamos el PDF en un formato de datos limpio para el navegador
+                    base64_pdf = base64.b64encode(contenido_binario).decode('utf-8')
                     
-                    with pdfplumber.open(bytes_io) as pdf:
-                        texto_pdf = ""
-                        for num_pag, pagina in enumerate(pdf.pages):
-                            texto_pdf += f"📝 --- PÁGINA {num_pag + 1} ---\n\n"
-                            texto_pdf += (pagina.extract_text() or "[Esta página contiene una imagen o escaneo plano]") + "\n\n"
-                    
-                    st.markdown(f"""
-                        <div class="contenedor-vista-previa" style="white-space: pre-wrap; overflow-y: auto; max-height: 700px; font-family: 'Segoe UI', sans-serif;">
-                            {texto_pdf}
-                        </div>
-                    """, unsafe_allow_html=True)
+                    # Con este diseño limpio de visor embebido tipo objeto, Chrome dibuja los planos sin bloquearlos
+                    pdf_html = f'''
+                        <object data="data:application/pdf;base64,{base64_pdf}" type="application/pdf" width="100%" height="750px" style="border:3px solid #3b82f6; border-radius:10px;">
+                            <div style="padding:20px; background-color:white; color:black; border-radius:10px;">
+                                💡 Tu navegador requiere confirmación. Haz clic en el botón de abajo para revisar el plano técnico:
+                                <br><br>
+                                <a href="data:application/pdf;base64,{base64_pdf}" download="{nombre_archivo}" style="background-color:#1e3a8a; color:white; padding:10px 20px; text-decoration:none; border-radius:5px; font-weight:bold;">Visualizar PDF Completo ➔</a>
+                            </div>
+                        </object>
+                    '''
+                    st.markdown(pdf_html, unsafe_allow_html=True)
                     
     except Exception as err_lectura:
         st.error(f"No se pudo cargar la vista previa: {str(err_lectura)}")
