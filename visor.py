@@ -3,6 +3,7 @@ import streamlit as st
 import mammoth
 import zipfile
 import io
+from pypdf import PdfReader
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(
@@ -124,7 +125,7 @@ if st.session_state.archivo_activo_zip and os.path.exists(ZIP_DOCUMENTOS):
             with archive.open(ruta_interna) as file_data:
                 contenido_binario = file_data.read()
                 
-                # --- PROCESAR CASO DE ARCHIVO WORD (.DOCX) ---
+                # --- VISTA PREVIA PARA WORD (.DOCX) ---
                 if ruta_interna.lower().endswith('.docx'):
                     bytes_io = io.BytesIO(contenido_binario)
                     resultado = mammoth.convert_to_html(bytes_io, ignore_empty_paragraphs=True)
@@ -140,18 +141,24 @@ if st.session_state.archivo_activo_zip and os.path.exists(ZIP_DOCUMENTOS):
                         </div>
                     """, unsafe_allow_html=True)
                 
-                # --- PROCESAR CASO DE ARCHIVO PDF (.PDF) REPARADO CON BOTÓN DE VISTA COMPLETA ---
+                # --- VISTA PREVIA PARA PDF (.PDF) EXTRAYENDO EL TEXTO DIRECTO EN PANTALLA ---
                 elif ruta_interna.lower().endswith('.pdf'):
-                    st.info("💡 Debido a las políticas de seguridad de Chrome, puedes abrir este PDF en una pestaña de visualización limpia usando el botón de abajo.")
+                    bytes_io = io.BytesIO(contenido_binario)
+                    lector_pdf = PdfReader(bytes_io)
                     
-                    # Proporcionamos el visor oficial nativo por botón de descarga simulado
-                    st.download_button(
-                        label="📄 Hacer clic aquí para abrir y visualizar el PDF ➔",
-                        data=contenido_binario,
-                        file_name=nombre_archivo,
-                        mime="application/pdf",
-                        use_container_width=True
-                    )
+                    texto_completo = ""
+                    for num_pag, pagina in enumerate(lector_pdf.pages):
+                        texto_completo += f"--- PÁGINA {num_pag + 1} ---\n"
+                        texto_completo += pagina.extract_text() + "\n\n"
+                    
+                    if not texto_completo.strip():
+                        texto_completo = "El PDF no contiene texto digital copiable (es una imagen/escaneo)."
+                        
+                    st.markdown(f"""
+                        <div class="contenedor-vista-previa">
+                            <pre style="white-space: pre-wrap; font-family: sans-serif; font-size:15px; color:#1e293b;">{texto_completo}</pre>
+                        </div>
+                    """, unsafe_allow_html=True)
                     
     except Exception as err_lectura:
         st.error(f"No se pudo cargar la vista previa: {str(err_lectura)}")
